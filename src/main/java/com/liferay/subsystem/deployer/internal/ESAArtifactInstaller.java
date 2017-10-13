@@ -62,7 +62,10 @@ public class ESAArtifactInstaller implements ArtifactInstaller {
 
 	public void update(File file) throws Exception {
 		String location = getLocation(file);
-		getSubsystem(location).update();
+		Subsystem subsystem = getSubsystem(location);
+
+		// this command does not exist
+		// subsystem.update();
 	}
 
 	public void uninstall(File file) throws Exception {
