@@ -1,0 +1,8 @@
+.gradle/
+build/
+target/
+.idea
+.DS_Store
+**/.DS_Store
+
+subsystem-deployer.iml

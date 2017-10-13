@@ -1,0 +1,3 @@
+Bundle-Name: subsystem-deployer
+Bundle-SymbolicName: com.liferay.subsystem.deployer.internal
+Bundle-Version: 1.0.0
