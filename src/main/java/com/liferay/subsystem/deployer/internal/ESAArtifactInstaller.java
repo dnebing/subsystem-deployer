@@ -1,8 +1,6 @@
 package com.liferay.subsystem.deployer.internal;
 
 import com.liferay.portal.deploy.DeployUtil;
-import com.liferay.portal.kernel.concurrent.DefaultNoticeableFuture;
-import com.liferay.portal.kernel.deploy.auto.AutoDeployDir;
 import com.liferay.portal.kernel.deploy.auto.AutoDeployListener;
 import com.liferay.portal.kernel.deploy.auto.AutoDeployUtil;
 import com.liferay.portal.kernel.log.Log;
@@ -13,23 +11,20 @@ import com.liferay.portal.util.PropsValues;
 import org.apache.felix.fileinstall.ArtifactInstaller;
 
 import org.osgi.framework.*;
-import org.osgi.framework.wiring.FrameworkWiring;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Deactivate;
 import org.osgi.service.component.annotations.Reference;
 import org.osgi.service.subsystem.Subsystem;
-import org.osgi.service.url.URLConstants;
-import org.osgi.service.url.URLStreamHandlerService;
 
 import java.io.File;
-import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.util.*;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
 
 /**
+ * class ESAArtifactInstaller: This is an extension for the Felix FileInstall service that will
+ * handle the installation of Subsystem .esa files.
+ *
  * @author dnebinger
  */
 @Component(
@@ -40,15 +35,23 @@ public class ESAArtifactInstaller implements ArtifactInstaller {
 
 	public static final String DEFAULT_NAME = "esaAutoDeployDir";
 
+	/**
+	 * deactivate: Called when the module is being stopped.
+	 */
 	@Deactivate
 	public void deactivate() {
 		if (_log.isDebugEnabled()) {
 			_log.debug("Deactivating the ESAArtifactInstaller and corresponding scanner.");
 		}
 
+		// unregister our custom AutoDeployDir instance
 		AutoDeployUtil.unregisterDir(DEFAULT_NAME);
 	}
 
+	/**
+	 * activate: Called when the module is being started.
+	 * @param bundleContext
+	 */
 	@Activate
 	public void activate(BundleContext bundleContext) {
 		_bundleContext = bundleContext;
@@ -63,22 +66,29 @@ public class ESAArtifactInstaller implements ArtifactInstaller {
 
 		// since we're activating, let's also activate the scanner.
 		try {
+			// find the deploy dir that we're going to scan
 			File deployDir = new File(
 					PrefsPropsUtil.getString(
 							PropsKeys.AUTO_DEPLOY_DEPLOY_DIR,
 							PropsValues.AUTO_DEPLOY_DEPLOY_DIR));
+			// find the default dest dir
 			File destDir = new File(DeployUtil.getAutoDeployDestDir());
+
+			// get the interval for directory scans.
 			long interval = PrefsPropsUtil.getLong(
 					PropsKeys.AUTO_DEPLOY_INTERVAL,
 					PropsValues.AUTO_DEPLOY_INTERVAL);
 
+			// create a list of autodeploylisteners, will only have our ESAAutoDeployListener instance.
 			List<AutoDeployListener> autoDeployListeners =
 					getAutoDeployListeners(false);
 
+			// create our deploy dir manager
 			ESAAutoDeployDir autoDeployDir = new ESAAutoDeployDir(
 					DEFAULT_NAME, deployDir, destDir, interval,
 					autoDeployListeners);
 
+			// if auto deploy is enabled
 			if (PrefsPropsUtil.getBoolean(
 					PropsKeys.AUTO_DEPLOY_ENABLED,
 					PropsValues.AUTO_DEPLOY_ENABLED)) {
@@ -87,6 +97,7 @@ public class ESAArtifactInstaller implements ArtifactInstaller {
 					_log.info("Registering auto deploy directories");
 				}
 
+				// register the scanner
 				AutoDeployUtil.registerDir(autoDeployDir);
 			}
 			else {
@@ -140,6 +151,11 @@ public class ESAArtifactInstaller implements ArtifactInstaller {
 		return name.endsWith(".esa");
 	}
 
+	/**
+	 * install: Called by FileInstall to handle a specific install.
+	 * @param file
+	 * @throws Exception
+	 */
 	public void install(File file) throws Exception {
 		String location = getLocation(file);
 
@@ -147,9 +163,11 @@ public class ESAArtifactInstaller implements ArtifactInstaller {
 			_log.debug("About to install subsystem from [" + location + "].");
 		}
 
+		// have the root subsystem install the given subsystem
 		Subsystem installed = getRootSubsystem().install(location);
 
 		if (Validator.isNotNull(installed)) {
+			// auto-start the subsystem if it is installed only.
 			switch (installed.getState()) {
 				case ACTIVE:
 				case STARTING:
@@ -171,6 +189,16 @@ public class ESAArtifactInstaller implements ArtifactInstaller {
 		}
 	}
 
+	/**
+	 * update: Called by FileInstall when the file artifact was changed (i.e. a new version deployed).  Unfortunately
+	 * the Subsystem spec does not support handling updates.  This actually makes sense; can you imagine how hard it
+	 * would be to selectively pick out bundles or subsystems, determine if they have changed, and update them individually?
+	 *
+	 * Instead, we're just going to uninstall the file as it currently is and will do a regular install again.
+	 *
+	 * @param file
+	 * @throws Exception
+	 */
 	public void update(File file) throws Exception {
 		// The subsystem specification does not cover updates.
 		// I get it, it would be a hard problem to solve and prone to lots of issues.
@@ -194,6 +222,11 @@ public class ESAArtifactInstaller implements ArtifactInstaller {
 		}
 	}
 
+	/**
+	 * uninstall: Called when the .esa file is being uninstalled.
+	 * @param file
+	 * @throws Exception
+	 */
 	public void uninstall(File file) throws Exception {
 		String location = getLocation(file);
 
